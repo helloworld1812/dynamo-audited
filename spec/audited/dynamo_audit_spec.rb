@@ -2,7 +2,7 @@ require "spec_helper"
 
 SingleCov.covered! uncovered: 2 # Rails version check
 
-class CustomAudit < Audited::Audit
+class CustomAudit < Audited::DynamoAudit
   def custom_method
     "I'm custom!"
   end
@@ -23,8 +23,8 @@ class Models::ActiveRecord::CustomUserSubclass < Models::ActiveRecord::CustomUse
   audited
 end
 
-describe Audited::Audit do
-  let(:user) { Models::ActiveRecord::User.new name: "Testing" }
+describe Audited::DynamoAudit do
+  let(:user) { Models::ActiveRecord::User.create name: "Testing" }
 
   describe "audit class" do
     around(:example) do |example|
@@ -55,7 +55,7 @@ describe Audited::Audit do
         record = TempModel2.create
 
         audit = record.audits.first
-        expect(audit).to be_a Audited::Audit
+        expect(audit).to be_a Audited::DynamoAudit
         expect(audit.respond_to?(:custom_method)).to be false
       end
     end
@@ -64,15 +64,10 @@ describe Audited::Audit do
   describe "#audited_changes" do
     let(:audit) { Audited.audit_class.new }
 
-    it "can unserialize yaml from text columns" do
+    it "allow indifferent access" do
       audit.audited_changes = {foo: "bar"}
-      expect(audit.audited_changes).to eq foo: "bar"
-    end
-
-    it "does not unserialize from binary columns" do
-      allow(Audited::YAMLIfTextColumnType).to receive(:text_column?).and_return(false)
-      audit.audited_changes = {foo: "bar"}
-      expect(audit.audited_changes).to eq "{:foo=>\"bar\"}"
+      expect(audit.audited_changes[:foo]).to eq "bar"
+      expect(audit.audited_changes["foo"]).to eq "bar"
     end
   end
 
@@ -109,6 +104,14 @@ describe Audited::Audit do
     it "should be able to set the user to a model object" do
       subject.user = user
       expect(subject.user).to eq(user)
+    end
+
+    it "should be able to set the user to a tableless model" do
+      tableless_user = Models::TablelessModel::User.new(id: 12345, core_company_id: 123, auth_token: 'token')
+      subject.user = tableless_user
+      expect(subject.user.id).to eq(tableless_user.id)
+      expect(subject.user.core_company_id).to eq(tableless_user.core_company_id)
+      expect(subject.user.auth_token).to eq(tableless_user.auth_token)
     end
 
     it "should be able to set the user to nil" do
@@ -158,9 +161,10 @@ describe Audited::Audit do
       u.update_attribute :logins, 1
       u.update_attribute :logins, 2
 
-      expect(u.audits[2].revision.logins).to eq(2)
-      expect(u.audits[1].revision.logins).to eq(1)
-      expect(u.audits[0].revision.logins).to eq(0)
+      audits_arr = u.audits.to_a
+      expect(audits_arr[2].revision.logins).to eq(2)
+      expect(audits_arr[1].revision.logins).to eq(1)
+      expect(audits_arr[0].revision.logins).to eq(0)
     end
 
     it "should bypass attribute assignment wrappers" do
@@ -177,30 +181,15 @@ describe Audited::Audit do
     end
   end
 
-  describe ".collection_cache_key" do
-    if ActiveRecord::VERSION::MAJOR >= 5
-      it "uses created at" do
-        Audited::Audit.delete_all
-        audit = Models::ActiveRecord::User.create(name: "John").audits.last
-        audit.update_columns(created_at: Time.zone.parse("2018-01-01"))
-        expect(Audited::Audit.collection_cache_key).to match(/-20180101\d+$/)
-      end
-    else
-      it "is not defined" do
-        expect { Audited::Audit.collection_cache_key }.to raise_error(NoMethodError)
-      end
-    end
-  end
-
   describe ".assign_revision_attributes" do
     it "dups when frozen" do
       user.freeze
-      assigned = Audited::Audit.assign_revision_attributes(user, name: "Bar")
+      assigned = Audited::DynamoAudit.assign_revision_attributes(user, name: "Bar")
       expect(assigned.name).to eq "Bar"
     end
 
     it "ignores unassignable attributes" do
-      assigned = Audited::Audit.assign_revision_attributes(user, oops: "Bar")
+      assigned = Audited::DynamoAudit.assign_revision_attributes(user, oops: "Bar")
       expect(assigned.name).to eq "Testing"
     end
   end
@@ -209,71 +198,72 @@ describe Audited::Audit do
     user = Models::ActiveRecord::User.create! name: "Set Version Number"
     expect(user.audits.first.version).to eq(1)
     user.update_attribute :name, "Set to 2"
-    expect(user.audits.reload.first.version).to eq(1)
-    expect(user.audits.reload.last.version).to eq(2)
+    expect(user.audits.where(action: "create").first.version).to eq(1)
+    expect(user.audits.where(action: "update").first.version).to eq(2)
     user.destroy
-    expect(Audited::Audit.where(auditable_type: "Models::ActiveRecord::User", auditable_id: user.id).last.version).to eq(3)
+    expect(Audited::DynamoAudit.where(auditable_type: "Models::ActiveRecord::User", auditable_id: user.id, action: "destroy").last.version).to eq(3)
   end
 
   it "should set the request uuid on create" do
+    ::Audited.store[:current_request_uuid] = SecureRandom.uuid
     user = Models::ActiveRecord::User.create! name: "Set Request UUID"
-    expect(user.audits.reload.first.request_uuid).not_to be_blank
+    expect(user.audits.first.request_uuid).not_to be_blank
   end
 
   describe "reconstruct_attributes" do
     it "should work with the old way of storing just the new value" do
-      audits = Audited::Audit.reconstruct_attributes([Audited::Audit.new(audited_changes: {"attribute" => "value"})])
+      audits = Audited::DynamoAudit.reconstruct_attributes([Audited::DynamoAudit.new(audited_changes: {"attribute" => "value"})])
       expect(audits["attribute"]).to eq("value")
     end
   end
 
   describe "audited_classes" do
     it "should include audited classes" do
-      expect(Audited::Audit.audited_classes).to include(Models::ActiveRecord::User)
+      expect(Audited::DynamoAudit.audited_classes).to include(Models::ActiveRecord::User)
     end
 
     it "should include subclasses" do
-      expect(Audited::Audit.audited_classes).to include(Models::ActiveRecord::CustomUserSubclass)
+      expect(Audited::DynamoAudit.audited_classes).to include(Models::ActiveRecord::CustomUserSubclass)
     end
   end
 
   describe "new_attributes" do
     it "should return the audited_changes without modification for create" do
-      new_attributes = Audited::Audit.new(audited_changes: {int: 1, array: [1]}, action: :create).new_attributes
+      new_attributes = Audited::DynamoAudit.new(audited_changes: {int: 1, array: [1]}, action: :create).new_attributes
       expect(new_attributes).to eq({"int" => 1, "array" => [1]})
     end
 
     it "should return a hash that contains the after values of each attribute" do
-      new_attributes = Audited::Audit.new(audited_changes: {a: [1, 2], b: [3, 4]}, action: :update).new_attributes
+      new_attributes = Audited::DynamoAudit.new(audited_changes: {a: [1, 2], b: [3, 4]}, action: :update).new_attributes
       expect(new_attributes).to eq({"a" => 2, "b" => 4})
     end
 
     it "should return the audited_changes without modification for destroy" do
-      new_attributes = Audited::Audit.new(audited_changes: {int: 1, array: [1]}, action: :destroy).new_attributes
+      new_attributes = Audited::DynamoAudit.new(audited_changes: {int: 1, array: [1]}, action: :destroy).new_attributes
       expect(new_attributes).to eq({"int" => 1, "array" => [1]})
     end
   end
 
   describe "old_attributes" do
     it "should return the audited_changes without modification for create" do
-      old_attributes = Audited::Audit.new(audited_changes: {int: 1, array: [1]}, action: :create).new_attributes
+      old_attributes = Audited::DynamoAudit.new(audited_changes: {int: 1, array: [1]}, action: :create).new_attributes
       expect(old_attributes).to eq({"int" => 1, "array" => [1]})
     end
 
     it "should return a hash that contains the before values of each attribute" do
-      old_attributes = Audited::Audit.new(audited_changes: {a: [1, 2], b: [3, 4]}, action: :update).old_attributes
+      old_attributes = Audited::DynamoAudit.new(audited_changes: {a: [1, 2], b: [3, 4]}, action: :update).old_attributes
       expect(old_attributes).to eq({"a" => 1, "b" => 3})
     end
 
     it "should return the audited_changes without modification for destroy" do
-      old_attributes = Audited::Audit.new(audited_changes: {int: 1, array: [1]}, action: :destroy).old_attributes
+      old_attributes = Audited::DynamoAudit.new(audited_changes: {int: 1, array: [1]}, action: :destroy).old_attributes
       expect(old_attributes).to eq({"int" => 1, "array" => [1]})
     end
   end
 
   describe "as_user" do
     it "should record user objects" do
-      Audited::Audit.as_user(user) do
+      Audited::DynamoAudit.as_user(user) do
         company = Models::ActiveRecord::Company.create name: "The auditors"
         company.name = "The Auditors, Inc"
         company.save
@@ -285,26 +275,26 @@ describe Audited::Audit do
     end
 
     it "should support nested as_user" do
-      Audited::Audit.as_user("sidekiq") do
+      Audited::DynamoAudit.as_user("sidekiq") do
         company = Models::ActiveRecord::Company.create name: "The auditors"
         company.name = "The Auditors, Inc"
         company.save
-        expect(company.audits[-1].user).to eq("sidekiq")
+        expect(company.audits.max_by(&:version).user).to eq("sidekiq")
 
-        Audited::Audit.as_user(user) do
+        Audited::DynamoAudit.as_user(user) do
           company.name = "NEW Auditors, Inc"
           company.save
-          expect(company.audits[-1].user).to eq(user)
+          expect(company.audits.max_by(&:version).user).to eq(user)
         end
 
         company.name = "LAST Auditors, Inc"
         company.save
-        expect(company.audits[-1].user).to eq("sidekiq")
+        expect(company.audits.max_by(&:version).user).to eq("sidekiq")
       end
     end
 
     it "should record usernames" do
-      Audited::Audit.as_user(user.name) do
+      Audited::DynamoAudit.as_user(user.name) do
         company = Models::ActiveRecord::Company.create name: "The auditors"
         company.name = "The Auditors, Inc"
         company.save
@@ -320,14 +310,14 @@ describe Audited::Audit do
         expect(user.save).to eq(true)
 
         t1 = Thread.new do
-          Audited::Audit.as_user(user) do
+          Audited::DynamoAudit.as_user(user) do
             sleep 1
             expect(Models::ActiveRecord::Company.create(name: "The Auditors, Inc").audits.first.user).to eq(user)
           end
         end
 
         t2 = Thread.new do
-          Audited::Audit.as_user(user.name) do
+          Audited::DynamoAudit.as_user(user.name) do
             expect(Models::ActiveRecord::Company.create(name: "The Competing Auditors, LLC").audits.first.username).to eq(user.name)
             sleep 0.5
           end
@@ -339,7 +329,7 @@ describe Audited::Audit do
     end
 
     it "should return the value from the yield block" do
-      result = Audited::Audit.as_user("foo") do
+      result = Audited::DynamoAudit.as_user("foo") do
         42
       end
       expect(result).to eq(42)
@@ -347,7 +337,7 @@ describe Audited::Audit do
 
     it "should reset audited_user when the yield block raises an exception" do
       expect {
-        Audited::Audit.as_user("foo") do
+        Audited::DynamoAudit.as_user("foo") do
           raise StandardError.new("expected")
         end
       }.to raise_exception("expected")

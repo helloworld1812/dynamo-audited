@@ -42,7 +42,7 @@ describe AuditsController do
       controller.send(:current_user=, user)
       expect {
         post :create
-      }.to change(Audited::Audit, :count)
+      }.to change(Audited::DynamoAudit, :count)
 
       expect(controller.company.audits.last.user).to eq(user)
     end
@@ -52,7 +52,7 @@ describe AuditsController do
       Audited.current_user_method = :nope
       expect {
         post :create
-      }.to change(Audited::Audit, :count)
+      }.to change(Audited::DynamoAudit, :count)
       expect(controller.company.audits.last.user).to eq(nil)
     end
 
@@ -62,7 +62,7 @@ describe AuditsController do
 
       expect {
         post :create
-      }.to change(Audited::Audit, :count)
+      }.to change(Audited::DynamoAudit, :count)
 
       expect(controller.company.audits.last.user).to eq(user)
     end
@@ -92,7 +92,7 @@ describe AuditsController do
 
       expect {
         post :create
-      }.to change(Audited::Audit, :count)
+      }.to change(Audited::DynamoAudit, :count)
 
       expect(controller.company.audits.last.user).to eq(user)
     end
@@ -104,7 +104,7 @@ describe AuditsController do
 
       expect {
         put :update, params: {id: 123}
-      }.to_not change(Audited::Audit, :count)
+      }.to_not change(Audited::DynamoAudit, :count)
     end
   end
 end

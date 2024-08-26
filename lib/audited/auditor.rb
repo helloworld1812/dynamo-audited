@@ -79,7 +79,6 @@ module Audited
           before_destroy :require_comment if audited_options[:on].include?(:destroy)
         end
 
-        has_many :audits, -> { order(version: :asc) }, as: :auditable, class_name: Audited.audit_class.name, inverse_of: :auditable
         Audited.audit_class.audited_class_names << to_s
 
         after_create :audit_create if audited_options[:on].include?(:create)
@@ -98,12 +97,30 @@ module Audited
       end
 
       def has_associated_audits
-        has_many :associated_audits, as: :associated, class_name: Audited.audit_class.name
+        define_method :associated_audits do
+          return [] unless id.present?
+
+          Audited.audit_class.where(associated_id: id, associated_type: self.class.name)
+        end
       end
     end
 
     module AuditedInstanceMethods
       REDACTED = "[REDACTED]"
+
+      def audits
+        return [] unless id.present?
+
+        Audited.audit_class.where(auditable_id: id, auditable_type: self.class.name)
+      end
+
+      def create_audit(attributes = {})
+        # convert Time to Integer since dynamoDB use timestamp
+        attributes[:audited_changes] = attributes[:audited_changes]&.transform_values do |value|
+          value.is_a?(Time) ? value.to_i : value
+        end
+        Audited.audit_class.create(attributes.merge(auditable_id: id, auditable_type: self.class.name))
+      end
 
       # Temporarily turns off auditing while saving.
       def save_without_auditing
@@ -143,9 +160,9 @@ module Audited
       #   end
       #
       def revisions(from_version = 1)
-        return [] unless audits.from_version(from_version).exists?
+        return [] unless audits.where("version.gte": from_version).count > 0
 
-        all_audits = audits.select([:audited_changes, :version, :action]).to_a
+        all_audits = audits.project(:id, :audited_changes, :version, :action).to_a
         targeted_audits = all_audits.select { |audit| audit.version >= from_version }
 
         previous_attributes = reconstruct_attributes(all_audits - targeted_audits)
@@ -166,8 +183,8 @@ module Audited
 
       # Find the oldest revision recorded prior to the date/time provided.
       def revision_at(date_or_time)
-        audits = self.audits.up_until(date_or_time)
-        revision_with Audited.audit_class.reconstruct_attributes(audits) unless audits.empty?
+        audits = self.audits.where("created_at.lte": date_or_time)
+        revision_with Audited.audit_class.reconstruct_attributes(audits) unless audits.count == 0
       end
 
       # List of attributes that are audited.
@@ -180,9 +197,8 @@ module Audited
 
       # Returns a list combined of record audits and associated audits.
       def own_and_associated_audits
-        Audited.audit_class.unscoped.where(auditable: self)
-          .or(Audited.audit_class.unscoped.where(associated: self))
-          .order(created_at: :desc)
+        (Audited.audit_class.where(auditable_id: self.id, auditable_type: self.class.name).to_a +
+          Audited.audit_class.where(associated_id: id, associated_type: self.class.name).to_a).sort_by(&:created_at).reverse
       end
 
       # Combine multiple audits into one.
@@ -194,7 +210,7 @@ module Audited
         transaction do
           begin
             combine_target.save!
-            audits_to_combine.unscope(:limit).where("version < ?", combine_target.version).delete_all
+            audits_to_combine.where("version.lt": combine_target.version).delete_all
           rescue ActiveRecord::Deadlocked
             # Ignore Deadlocks, if the same record is getting its old audits combined more than once at the same time then
             # both combining operations will be the same. Ignoring this error allows one of the combines to go through successfully.
@@ -250,11 +266,16 @@ module Audited
           end
 
         filtered_changes = normalize_enum_changes(filtered_changes)
+        filtered_changes = normalize_time_changes(filtered_changes)
 
         if for_touch && (last_audit = audits.last&.audited_changes)
           filtered_changes.reject! do |k, v|
             last_audit[k].to_json == v.to_json ||
-            last_audit[k].to_json == v[1].to_json
+            last_audit[k].to_json == v[1].to_json ||
+            # handle BigDecimal and Integer/Float comparison
+            (last_audit[k].is_a?(BigDecimal) && last_audit[k] == v[1].to_d) ||
+            (last_audit[k].is_a?(Array) && last_audit[k][0].is_a?(BigDecimal) &&
+              last_audit[k] == v.map(&:to_d))
           end
         end
 
@@ -276,6 +297,15 @@ module Audited
               else
                 values[changes[name]]
               end
+          end
+        end
+        changes
+      end
+
+      def normalize_time_changes(changes)
+        changes.each do |name, value|
+          if value.is_a?(Array)
+            changes[name] = value.map{|v| v.is_a?(Time) ? v.to_i : v }
           end
         end
         changes
@@ -323,11 +353,11 @@ module Audited
           version = if audit_version
             audit_version - 1
           else
-            previous = audits.descending.offset(1).first
+            previous = audits.scan_index_forward(false).record_limit(2).last
             previous ? previous.version : 1
           end
         end
-        audits.to_version(version)
+        audits.where("version.lte": version)
       end
 
       def audit_create
@@ -360,10 +390,14 @@ module Audited
         self.audit_comment = nil
 
         if auditing_enabled
-          attrs[:associated] = send(audit_associated_with) unless audit_associated_with.nil?
+          if audit_associated_with.present?
+            associated_record = send(audit_associated_with)
+            attrs[:associated_id] = associated_record.id
+            attrs[:associated_type] = associated_record.class.name
+          end
 
           run_callbacks(:audit) {
-            audit = audits.create(attrs)
+            audit = create_audit(attrs)
             combine_audits_if_needed if attrs[:action] != "create"
             audit
           }
@@ -387,7 +421,7 @@ module Audited
         max_audits = evaluate_max_audits
 
         if max_audits && (extra_count = audits.count - max_audits) > 0
-          audits_to_combine = audits.limit(extra_count + 1)
+          audits_to_combine = audits.record_limit(extra_count + 1)
           combine_audits(audits_to_combine)
         end
       end
