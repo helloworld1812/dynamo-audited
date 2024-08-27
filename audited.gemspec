@@ -2,7 +2,7 @@ $:.push File.expand_path("../lib", __FILE__)
 require "audited/version"
 
 Gem::Specification.new do |gem|
-  gem.name = "audited"
+  gem.name = "dynamo-audited"
   gem.version = Audited::VERSION
 
   gem.authors = ["Brandon Keepers", "Kenneth Kalmer", "Daniel Morrison", "Brian Ryckbost", "Steve Richert", "Ryan Glover"]
