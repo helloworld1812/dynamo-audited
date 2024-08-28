@@ -25,7 +25,7 @@ module Audited
 
     range :created_at, :datetime
 
-    global_secondary_index hash_key: :auditable_id, range_key: :version, projected_attributes: :all, name: "#{table_name}_index_auditable_id_version"
+    global_secondary_index hash_key: :auditable_id, range_key: :version, projected_attributes: :all, name: "auditable_id_version_index"
 
     cattr_accessor :audited_class_names
     self.audited_class_names = Set.new
