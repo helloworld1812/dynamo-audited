@@ -22,7 +22,9 @@ module Audited
       # The audit_class is set as String in the initializer. It can not be constantized during initialization and must
       # be constantized at runtime. See https://github.com/collectiveidea/audited/issues/608
       @audit_class = @audit_class.safe_constantize if @audit_class.is_a?(String)
-      @audit_class ||= Audited::Audit
+
+      # Use dynamo audit as default audit class
+      @audit_class ||= Audited::DynamoAudit
     end
 
     # remove audit_model in next major version it was only shortly present in 5.1.0
@@ -50,9 +52,9 @@ end
 require "audited/auditor"
 
 ActiveSupport.on_load :active_record do
-  require "audited/audit"
   include Audited::Auditor
 end
 
+require "audited/dynamo_audit"
 require "audited/sweeper"
 require "audited/railtie" if Audited.const_defined?(:Rails)

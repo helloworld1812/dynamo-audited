@@ -2,7 +2,7 @@ $:.push File.expand_path("../lib", __FILE__)
 require "audited/version"
 
 Gem::Specification.new do |gem|
-  gem.name = "audited"
+  gem.name = "dynamo-audited"
   gem.version = Audited::VERSION
 
   gem.authors = ["Brandon Keepers", "Kenneth Kalmer", "Daniel Morrison", "Brian Ryckbost", "Steve Richert", "Ryan Glover"]
@@ -18,6 +18,7 @@ Gem::Specification.new do |gem|
 
   gem.add_dependency "activerecord", ">= 5.2", "< 8.0"
   gem.add_dependency "activesupport", ">= 5.2", "< 8.0"
+  gem.add_dependency "dynamoid"
 
   gem.add_development_dependency "appraisal"
   gem.add_development_dependency "rails", ">= 5.2", "< 8.0"
@@ -25,14 +26,6 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency "standard"
   gem.add_development_dependency "single_cov"
 
-  # JRuby support for the test ENV
-  if defined?(JRUBY_VERSION)
-    gem.add_development_dependency "activerecord-jdbcsqlite3-adapter", "~> 1.3"
-    gem.add_development_dependency "activerecord-jdbcpostgresql-adapter", "~> 1.3"
-    gem.add_development_dependency "activerecord-jdbcmysql-adapter", "~> 1.3"
-  else
-    gem.add_development_dependency "sqlite3", ">= 1.3.6"
-    gem.add_development_dependency "mysql2", ">= 0.3.20"
-    gem.add_development_dependency "pg", ">= 0.18", "< 2.0"
-  end
+  gem.add_development_dependency "pg", ">= 0.18", "< 2.0"
+  gem.add_development_dependency  "aws-sdk"
 end

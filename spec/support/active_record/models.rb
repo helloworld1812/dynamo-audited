@@ -189,4 +189,12 @@ module Models
       audited on: [:touch]
     end
   end
+
+  module TablelessModel
+    class User
+      include ActiveModel::Model
+
+      attr_accessor :core_company_id, :id, :auth_token
+    end
+  end
 end
