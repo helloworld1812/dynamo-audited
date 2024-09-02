@@ -4,7 +4,7 @@ require "set"
 
 module Audited
   class DynamoAudit
-    include Dynamoid::Document
+    include ::Dynamoid::Document
 
     table name: :audits, key: :id, capacity_mode: :on_demand
 
