@@ -117,7 +117,7 @@ module Audited
       def create_audit(attributes = {})
         # convert Time to Integer since dynamoDB use timestamp
         attributes[:audited_changes] = attributes[:audited_changes]&.transform_values do |value|
-          value.is_a?(Time) ? value.to_i : value
+          value.is_a?(Time) ? value.to_f : value
         end
         Audited.audit_class.create(attributes.merge(auditable_id: id, auditable_type: self.class.name))
       end
@@ -305,7 +305,7 @@ module Audited
       def normalize_time_changes(changes)
         changes.each do |name, value|
           if value.is_a?(Array)
-            changes[name] = value.map{|v| v.is_a?(Time) ? v.to_i : v }
+            changes[name] = value.map{|v| v.is_a?(Time) ? v.to_f : v }
           end
         end
         changes
