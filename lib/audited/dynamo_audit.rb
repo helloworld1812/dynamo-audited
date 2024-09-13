@@ -154,8 +154,8 @@ module Audited
         self.user_id = user.id
         self.user_type = user.class.name
         user_attr = {}
-        user.instance_variables.each do |var_name|
-          user_attr[var_name.to_s.gsub('@', '')] = user.instance_variable_get(var_name)
+        Audited.current_user_attributes.each do |attribute|
+          user_attr[attribute] = user.send(attribute)
         end
         self.user_attributes = user_attr
       else

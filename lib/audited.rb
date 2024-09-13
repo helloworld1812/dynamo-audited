@@ -12,6 +12,7 @@ module Audited
     attr_accessor \
       :auditing_enabled,
       :current_user_method,
+      :current_user_attributes,
       :ignored_attributes,
       :ignored_default_callbacks,
       :max_audits,
