@@ -107,6 +107,11 @@ describe Audited::DynamoAudit do
     end
 
     it "should be able to set the user to a tableless model" do
+      Audited.current_user_attributes = [
+        :id,
+        :core_company_id,
+        :auth_token
+      ]
       tableless_user = Models::TablelessModel::User.new(id: 12345, core_company_id: 123, auth_token: 'token')
       subject.user = tableless_user
       expect(subject.user.id).to eq(tableless_user.id)
