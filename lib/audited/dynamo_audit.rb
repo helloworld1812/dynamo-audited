@@ -6,7 +6,7 @@ module Audited
   class DynamoAudit
     include Dynamoid::Document
 
-    table name: :audits, key: :id, capacity_mode: :on_demand
+    table name: :audits, key: :id
 
     field :auditable_id, :string
     field :auditable_type, :string
