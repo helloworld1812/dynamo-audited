@@ -155,7 +155,10 @@ module Audited
         self.user_type = user.class.name
         user_attr = {}
         Audited.current_user_attributes.each do |attribute|
-          user_attr[attribute] = user.send(attribute)
+          value = user.send(attribute)
+          # convert id to string, otherwise bigint ID will be read as BigDecimal
+          normalized_value = attribute.to_s == 'id' ? value.to_s : value
+          user_attr[attribute] = normalized_value
         end
         self.user_attributes = user_attr
       else
