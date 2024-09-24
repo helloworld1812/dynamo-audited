@@ -6,7 +6,7 @@ module Audited
   class DynamoAudit
     include Dynamoid::Document
 
-    table name: :audits, key: :id, capacity_mode: :on_demand
+    table name: :audits, key: :id
 
     field :auditable_id, :string
     field :auditable_type, :string
@@ -154,8 +154,11 @@ module Audited
         self.user_id = user.id
         self.user_type = user.class.name
         user_attr = {}
-        user.instance_variables.each do |var_name|
-          user_attr[var_name.to_s.gsub('@', '')] = user.instance_variable_get(var_name)
+        Audited.current_user_attributes.each do |attribute|
+          value = user.send(attribute)
+          # convert id to string, otherwise bigint ID will be read as BigDecimal
+          normalized_value = attribute.to_s == 'id' ? value.to_s : value
+          user_attr[attribute] = normalized_value
         end
         self.user_attributes = user_attr
       else
