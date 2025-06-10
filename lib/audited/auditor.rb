@@ -116,9 +116,9 @@ module Audited
 
       def create_audit(attributes = {})
         # convert Time to Integer since dynamoDB use timestamp
-        attributes[:audited_changes] = attributes[:audited_changes]&.transform_values do |value|
-          value.is_a?(Time) ? value.to_i : value
-        end
+        # read more: https://aws.amazon.com/blogs/database/working-with-date-and-timestamp-data-types-in-amazon-dynamodb/
+        attributes[:audited_changes] = deep_transform_audited_value(attributes[:audited_changes])
+
         Audited.audit_class.create(attributes.merge(auditable_id: id, auditable_type: self.class.name))
       end
 
@@ -302,6 +302,21 @@ module Audited
         changes
       end
 
+      def deep_transform_audited_value(obj)
+        case obj
+        when Hash
+          obj.transform_values { |v| deep_transform_audited_value(v) }
+        when Array
+          obj.map { |v| deep_transform_audited_value(v) }
+        when Date
+          obj.iso8601
+        when Time
+          obj.to_i
+        else
+          obj
+        end
+      end
+
       def normalize_time_changes(changes)
         changes.each do |name, value|
           if value.is_a?(Array)
@@ -392,8 +407,10 @@ module Audited
         if auditing_enabled
           if audit_associated_with.present?
             associated_record = send(audit_associated_with)
-            attrs[:associated_id] = associated_record.id
-            attrs[:associated_type] = associated_record.class.name
+            if associated_record
+              attrs[:associated_id] = associated_record.id
+              attrs[:associated_type] = associated_record.class.name
+            end
           end
 
           run_callbacks(:audit) {
