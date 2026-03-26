@@ -28,6 +28,7 @@ end
 
 describe AuditsController do
   include RSpec::Rails::ControllerExampleGroup
+
   render_views
 
   before do

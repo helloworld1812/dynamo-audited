@@ -1,9 +1,10 @@
 require "spec_helper"
 
-# not testing proxy_respond_to? hack / 2 methods / deprecation of `version`
+# not testing proxy_respond_to? hack (L242)
+# dead code on Rails 8: changes fallback (L256), rails_below?("5.0") (L296),
+# normalize_time_changes non-array else (L322), encrypted_attributes else (L340)
 # also, an additional 6 around `after_touch` for Versions before 6.
-# Increased to 17/10 to get to green CI as a new baseline, August 2024.
-uncovered = (ActiveRecord::VERSION::MAJOR < 6) ? 17 : 10
+uncovered = (ActiveRecord::VERSION::MAJOR < 6) ? 17 : 5
 SingleCov.covered! uncovered: uncovered
 
 class ConditionalPrivateCompany < ::ActiveRecord::Base
@@ -56,6 +57,25 @@ end
 class InclusiveCompany2 < ::ActiveRecord::Base
   self.table_name = "companies"
   audited unless: proc { false }
+end
+
+class UnknownConditionCompany < ::ActiveRecord::Base
+  self.table_name = "companies"
+  audited if: :nonexistent_condition_method
+end
+
+class ProcMaxAuditsUser < ::ActiveRecord::Base
+  self.table_name = "users"
+  audited max_audits: -> { 2 }
+end
+
+class SymbolMaxAuditsUser < ::ActiveRecord::Base
+  self.table_name = "users"
+  audited max_audits: :audit_limit
+
+  def audit_limit
+    2
+  end
 end
 
 class Secret < ::ActiveRecord::Base
@@ -144,6 +164,16 @@ describe Audited::Auditor do
           it { is_expected.to be_truthy }
         end
       end
+    end
+
+    it "should not re-include modules when audited is called twice on the same class" do
+      modules_before = Models::ActiveRecord::User.included_modules.length
+      Models::ActiveRecord::User.audited
+      expect(Models::ActiveRecord::User.included_modules.length).to eq(modules_before)
+    end
+
+    it "should still audit when condition method does not exist on the model" do
+      expect { UnknownConditionCompany.create!(name: "Test") }.to change(Audited::DynamoAudit, :count).by(1)
     end
 
     it "should be configurable which attributes are not audited via ignored_attributes" do
@@ -322,6 +352,12 @@ describe Audited::Auditor do
 
     it "should store enum value" do
       expect(user.audits.first.audited_changes["status"]).to eq(1)
+    end
+
+    it "should serialize Date values as ISO8601 strings" do
+      date = Date.new(2024, 6, 15)
+      user = Models::ActiveRecord::User.create!(name: "Dated", hired_on: date)
+      expect(user.audits.first.audited_changes["hired_on"]).to eq("2024-06-15")
     end
 
     context "when store_synthesized_enums is set to true" do
@@ -620,6 +656,12 @@ describe Audited::Auditor do
       owned_company.destroy
       expect(owned_company.audits.last.associated).to eq(owner)
     end
+
+    it "should not set associated_id when associated record is nil" do
+      company = Models::ActiveRecord::OwnedCompany.new(name: "No Owner")
+      company.save(validate: false)
+      expect(company.audits.last.associated_id).to be_nil
+    end
   end
 
   describe "has associated audits" do
@@ -629,6 +671,10 @@ describe Audited::Auditor do
     it "should list the associated audits" do
       expect(owner.associated_audits.count).to eq(1)
       expect(owner.associated_audits.first.auditable).to eq(owned_company)
+    end
+
+    it "should return empty array for unsaved records" do
+      expect(Models::ActiveRecord::Owner.new.associated_audits).to eq([])
     end
   end
 
@@ -678,6 +724,20 @@ describe Audited::Auditor do
         expect(audits.to_a[1].audited_changes).to eq({"activated" => [nil, true]})
         expect(audits.to_a[2].audited_changes).to eq({"favourite_device" => [nil, "Android Phone"]})
       end
+    end
+
+    it "should support a Proc for max_audits" do
+      user = ProcMaxAuditsUser.create!(name: "Test")
+      user.update!(name: "Update 1")
+      user.update!(name: "Update 2")
+      expect(user.audits.count).to eq(2)
+    end
+
+    it "should support a Symbol for max_audits" do
+      user = SymbolMaxAuditsUser.create!(name: "Test")
+      user.update!(name: "Update 1")
+      user.update!(name: "Update 2")
+      expect(user.audits.count).to eq(2)
     end
 
     it "should add comment line for combined audit" do
@@ -873,10 +933,10 @@ describe Audited::Auditor do
     let(:user) { create_user }
 
     it "should find the latest revision before the given time" do
-      allow(DateTime).to receive(:now).and_return(1.hour.ago)
-      expect(user.audits.count).to eq(1)
+      travel_to(1.hour.ago) do
+        expect(user.audits.count).to eq(1)
+      end
 
-      allow(DateTime).to receive(:now).and_return(DateTime.current)
       user.update! name: "updated"
       expect(user.revision_at(2.minutes.ago).audit_version).to eq(1)
     end
@@ -948,6 +1008,14 @@ describe Audited::Auditor do
         Audited.auditing_enabled = true
         expect(Models::ActiveRecord::User.auditing_enabled).to eql(true)
       end
+    end
+
+    it "should not re-enable auditing if it was already disabled before the block" do
+      Models::ActiveRecord::User.disable_auditing
+      Models::ActiveRecord::User.without_auditing {}
+      expect(Models::ActiveRecord::User.auditing_enabled).to eq(false)
+    ensure
+      Models::ActiveRecord::User.enable_auditing
     end
 
     it "should reset auditing status even it raises an exception" do

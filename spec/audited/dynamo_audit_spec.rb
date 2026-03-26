@@ -112,7 +112,7 @@ describe Audited::DynamoAudit do
         :core_company_id,
         :auth_token
       ]
-      tableless_user = Models::TablelessModel::User.new(id: 12345, core_company_id: 123, auth_token: 'token')
+      tableless_user = Models::TablelessModel::User.new(id: 12345, core_company_id: 123, auth_token: "token")
       subject.user = tableless_user
       expect(subject.user.id).to eq(tableless_user.id.to_s)
       expect(subject.user.core_company_id).to eq(tableless_user.core_company_id)

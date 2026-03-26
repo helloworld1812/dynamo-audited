@@ -60,7 +60,7 @@ module Audited
       #
       def audited(options = {})
         # don't allow multiple calls
-        return if included_modules.include?(Audited::Auditor::AuditedInstanceMethods)
+        return if include?(Audited::Auditor::AuditedInstanceMethods)
 
         extend Audited::Auditor::AuditedClassMethods
         include Audited::Auditor::AuditedInstanceMethods
@@ -197,7 +197,7 @@ module Audited
 
       # Returns a list combined of record audits and associated audits.
       def own_and_associated_audits
-        (Audited.audit_class.where(auditable_id: self.id, auditable_type: self.class.name).to_a +
+        (Audited.audit_class.where(auditable_id: id, auditable_type: self.class.name).to_a +
           Audited.audit_class.where(associated_id: id, associated_type: self.class.name).to_a).sort_by(&:created_at).reverse
       end
 
@@ -258,7 +258,7 @@ module Audited
 
         all_changes = all_changes.except(*self.class.readonly_attributes.to_a) if exclude_readonly_attrs
 
-        filtered_changes = \
+        filtered_changes =
           if audited_options[:only].present?
             all_changes.slice(*self.class.audited_columns)
           else
@@ -271,11 +271,11 @@ module Audited
         if for_touch && (last_audit = audits.last&.audited_changes)
           filtered_changes.reject! do |k, v|
             last_audit[k].to_json == v.to_json ||
-            last_audit[k].to_json == v[1].to_json ||
-            # handle BigDecimal and Integer/Float comparison
-            (last_audit[k].is_a?(BigDecimal) && last_audit[k] == v[1].to_d) ||
-            (last_audit[k].is_a?(Array) && last_audit[k][0].is_a?(BigDecimal) &&
-              last_audit[k] == v.map(&:to_d))
+              last_audit[k].to_json == v[1].to_json ||
+              # handle BigDecimal and Integer/Float comparison
+              (last_audit[k].is_a?(BigDecimal) && last_audit[k] == v[1].to_d) ||
+              (last_audit[k].is_a?(Array) && last_audit[k][0].is_a?(BigDecimal) &&
+                last_audit[k] == v.map(&:to_d))
           end
         end
 
@@ -289,7 +289,7 @@ module Audited
 
         self.class.defined_enums.each do |name, values|
           if changes.has_key?(name)
-            changes[name] = \
+            changes[name] =
               if changes[name].is_a?(Array)
                 changes[name].map { |v| values[v] }
               elsif rails_below?("5.0")
@@ -320,7 +320,7 @@ module Audited
       def normalize_time_changes(changes)
         changes.each do |name, value|
           if value.is_a?(Array)
-            changes[name] = value.map{|v| v.is_a?(Time) ? v.to_i : v }
+            changes[name] = value.map { |v| v.is_a?(Time) ? v.to_i : v }
           end
         end
         changes
@@ -462,7 +462,7 @@ module Audited
       end
 
       CALLBACKS.each do |attr_name|
-        alias_method "#{attr_name}_callback".to_sym, attr_name
+        alias_method :"#{attr_name}_callback", attr_name
       end
 
       def auditing_enabled
