@@ -278,21 +278,21 @@ describe Audited::Auditor do
 
     context "when ignored_default_callbacks is set" do
       before { Audited.ignored_default_callbacks = [:create] }
-      after { Audited.ignored_default_callbacks = [] }
+      after do
+        Audited.ignored_default_callbacks = []
+        Audited.audit_class.audited_class_names.delete("DefaultCallback")
+        Audited.audit_class.audited_class_names.delete("CallbacksSpecified")
+      end
 
       it "should remove create callback" do
-        class DefaultCallback < ::ActiveRecord::Base
-          audited
-        end
-
+        stub_const("DefaultCallback", Class.new(::ActiveRecord::Base))
+        DefaultCallback.audited
         expect(DefaultCallback.audited_options[:on]).to eq([:update, :touch, :destroy])
       end
 
       it "should keep create callback if specified" do
-        class CallbacksSpecified < ::ActiveRecord::Base
-          audited on: [:create, :update, :destroy]
-        end
-
+        stub_const("CallbacksSpecified", Class.new(::ActiveRecord::Base))
+        CallbacksSpecified.audited(on: [:create, :update, :destroy])
         expect(CallbacksSpecified.audited_options[:on]).to eq([:create, :update, :destroy])
       end
     end
@@ -340,7 +340,7 @@ describe Audited::Auditor do
 
     it "should set the action to create" do
       expect(user.audits.first.action).to eq("create")
-      expect(Audited::DynamoAudit.where(action: "create").sort_by(&:created_at).last).to eq(user.audits.first)
+      expect(Audited::DynamoAudit.where(action: "create").max_by(&:created_at)).to eq(user.audits.first)
       expect(user.audits.where(action: "create").count).to eq(1)
       expect(user.audits.where(action: "update").count).to eq(0)
       expect(user.audits.where(action: "destroy").count).to eq(0)
@@ -408,7 +408,7 @@ describe Audited::Auditor do
     it "should set the action to 'update'" do
       @user.update! name: "Changed"
       expect(@user.audits.last.action).to eq("update")
-      expect(Audited::DynamoAudit.where(action: "update").sort_by(&:created_at).last).to eq(@user.audits.last)
+      expect(Audited::DynamoAudit.where(action: "update").max_by(&:created_at)).to eq(@user.audits.last)
       expect(@user.audits.where(action: "update").last).to eq(@user.audits.last)
     end
 
@@ -479,7 +479,7 @@ describe Audited::Auditor do
       it "should set the action to 'update'" do
         @user.touch(:suspended_at)
         expect(@user.audits.last.action).to eq("update")
-        expect(Audited::DynamoAudit.where(action: "update").sort_by(&:created_at).last).to eq(@user.audits.last)
+        expect(Audited::DynamoAudit.where(action: "update").max_by(&:created_at)).to eq(@user.audits.last)
         expect(@user.audits.where(action: "update").last).to eq(@user.audits.last)
       end
 
@@ -584,7 +584,7 @@ describe Audited::Auditor do
       @user.destroy
 
       expect(@user.audits.last.action).to eq("destroy")
-      expect(Audited::DynamoAudit.where(action: "destroy").sort_by(&:created_at).last).to eq(@user.audits.last)
+      expect(Audited::DynamoAudit.where(action: "destroy").max_by(&:created_at)).to eq(@user.audits.last)
       expect(@user.audits.where(action: "destroy").last).to eq(@user.audits.last)
     end
 

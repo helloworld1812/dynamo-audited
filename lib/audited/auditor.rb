@@ -208,13 +208,11 @@ module Audited
         combine_target.comment = "#{combine_target.comment}\nThis audit is the result of multiple audits being combined."
 
         transaction do
-          begin
-            combine_target.save!
-            audits_to_combine.where("version.lt": combine_target.version).delete_all
-          rescue ActiveRecord::Deadlocked
-            # Ignore Deadlocks, if the same record is getting its old audits combined more than once at the same time then
-            # both combining operations will be the same. Ignoring this error allows one of the combines to go through successfully.
-          end
+          combine_target.save!
+          audits_to_combine.where("version.lt": combine_target.version).delete_all
+        rescue ActiveRecord::Deadlocked
+          # Ignore Deadlocks, if the same record is getting its old audits combined more than once at the same time then
+          # both combining operations will be the same. Ignoring this error allows one of the combines to go through successfully.
         end
       end
 
@@ -381,7 +379,7 @@ module Audited
       end
 
       def audit_update
-        unless (changes = audited_changes(exclude_readonly_attrs: true)).empty? && (audit_comment.blank? || audited_options[:update_with_comment_only] == false)
+        if !(changes = audited_changes(exclude_readonly_attrs: true)).empty? || !(audit_comment.blank? || audited_options[:update_with_comment_only] == false)
           write_audit(action: "update", audited_changes: changes,
             comment: audit_comment)
         end

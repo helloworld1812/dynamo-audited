@@ -183,7 +183,7 @@ module Audited
       if action == "create"
         self.version = 1
       else
-        audit_with_max_version = self.class.auditable_finder(auditable_id, auditable_type)&.sort_by(&:version)&.last
+        audit_with_max_version = self.class.auditable_finder(auditable_id, auditable_type)&.max_by(&:version)
         self.version = (audit_with_max_version&.version || 0) + 1
       end
     end
