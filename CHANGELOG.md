@@ -1,4 +1,20 @@
-# Audited ChangeLog
+# Dynamo Audited ChangeLog
+
+⚠️ **After 5.7.0, the gem is completely decoupled from upstream [audited](https://github.com/collectiveidea/audited)
+It was forked from the original audited gem and switched to the dynamodb adapter.**
+
+So the changelogs below are for the workstrem own `dynamo-audited` changelog
+
+### 6.0.0 (2025-03-27)
+- Upgrade to Ruby 3.4.4
+- Support for Rails 8.0, 8.1
+- Upgrade dynamoid to 3.12.1
+
+### 5.8.0 (2024-10)
+- Use the dynamodb adapter
+
+---
+Archived changelogs from upstream projects can be found in the [upstream changelog](https://github.com/collectiveidea/audited/blob/v5.7.0/CHANGELOG.md).
 
 ### 5.7.0 (2024-08-13)
 
