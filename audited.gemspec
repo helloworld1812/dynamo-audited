@@ -14,18 +14,18 @@ Gem::Specification.new do |gem|
 
   gem.files = `git ls-files`.split($\).reject { |f| f =~ /^(\.gemspec|\.git|\.standard|\.yard|gemfiles|test|spec)/ }
 
-  gem.required_ruby_version = ">= 2.3.0"
+  gem.required_ruby_version = ">= 3.1.0"
 
-  gem.add_dependency "activerecord", ">= 5.2", "< 8.0"
-  gem.add_dependency "activesupport", ">= 5.2", "< 8.0"
+  gem.add_dependency "activerecord", ">= 5.2", "< 8.2"
+  gem.add_dependency "activesupport", ">= 5.2", "< 8.2"
   gem.add_dependency "dynamoid"
 
   gem.add_development_dependency "appraisal"
-  gem.add_development_dependency "rails", ">= 5.2", "< 8.0"
+  gem.add_development_dependency "rails", ">= 5.2", "< 8.2"
   gem.add_development_dependency "rspec-rails"
   gem.add_development_dependency "standard"
   gem.add_development_dependency "single_cov"
 
   gem.add_development_dependency "pg", ">= 0.18", "< 2.0"
-  gem.add_development_dependency  "aws-sdk"
+  gem.add_development_dependency "aws-sdk"
 end

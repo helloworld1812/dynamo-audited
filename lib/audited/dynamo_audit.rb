@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module Audited
   class DynamoAudit
     include Dynamoid::Document
@@ -31,7 +29,7 @@ module Audited
     cattr_accessor :audited_class_names
     self.audited_class_names = Set.new
 
-    before_create :set_version_number, :set_request_uuid, :set_remote_address, :set_audit_user
+    before_create :set_created_at, :set_version_number, :set_request_uuid, :set_remote_address, :set_audit_user
 
     class << self
       # class methods to replace active record scope and association
@@ -158,7 +156,7 @@ module Audited
         Audited.current_user_attributes.each do |attribute|
           value = user.send(attribute)
           # convert id to string, otherwise bigint ID will be read as BigDecimal
-          normalized_value = attribute.to_s == 'id' ? value.to_s : value
+          normalized_value = (attribute.to_s == "id") ? value.to_s : value
           user_attr[attribute] = normalized_value
         end
         self.user_attributes = user_attr
@@ -175,11 +173,15 @@ module Audited
 
     private
 
+    def set_created_at
+      self.created_at ||= Time.current
+    end
+
     def set_version_number
       if action == "create"
         self.version = 1
       else
-        audit_with_max_version = self.class.auditable_finder(auditable_id, auditable_type)&.sort_by(&:version)&.last
+        audit_with_max_version = self.class.auditable_finder(auditable_id, auditable_type)&.max_by(&:version)
         self.version = (audit_with_max_version&.version || 0) + 1
       end
     end

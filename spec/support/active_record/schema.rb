@@ -35,7 +35,7 @@ ActiveRecord::Migration.verbose = false
 ActiveRecord::Base.establish_connection
 
 ActiveRecord::Schema.define do
-  create_table :users do |t|
+  create_table :users, force: :cascade do |t|
     t.column :name, :string
     t.column :username, :string
     t.column :password, :string
@@ -48,24 +48,25 @@ ActiveRecord::Schema.define do
     t.column :favourite_device, :string
     t.column :ssn, :integer
     t.column :phone_numbers, :string
+    t.column :hired_on, :date
   end
 
-  create_table :companies do |t|
+  create_table :companies, force: :cascade do |t|
     t.column :name, :string
     t.column :owner_id, :integer
     t.column :type, :string
   end
 
-  create_table :authors do |t|
+  create_table :authors, force: :cascade do |t|
     t.column :name, :string
   end
 
-  create_table :books do |t|
+  create_table :books, force: :cascade do |t|
     t.column :authord_id, :integer
     t.column :title, :string
   end
 
-  create_table :audits do |t|
+  create_table :audits, force: :cascade do |t|
     t.column :auditable_id, :integer
     t.column :auditable_type, :string
     t.column :associated_id, :integer
